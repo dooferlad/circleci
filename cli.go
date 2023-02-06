@@ -2,11 +2,12 @@ package main
 
 import (
 	"fmt"
+	"os"
+
 	"github.com/joho/godotenv"
 	"github.com/sirupsen/logrus"
 	"gorm.io/driver/sqlite"
 	"gorm.io/gorm"
-	"os"
 )
 
 type PipelineState struct {
@@ -31,9 +32,7 @@ func main() {
 		logrus.Fatal("Error loading .env file")
 	}
 
-	db, err := gorm.Open(sqlite.Open("test.db"), &gorm.Config{
-		SkipDefaultTransaction: true,
-	})
+	db, err := gorm.Open(sqlite.Open("test.db"), &gorm.Config{})
 	if err != nil {
 		logrus.Fatal(err)
 	}
@@ -52,20 +51,20 @@ func main() {
 	if err != nil {
 		logrus.Fatal(err)
 	}
-	for _, i := range v {
 
+	for _, i := range v {
 		pipelineState := &PipelineState{}
 		result := db.Limit(1).Find(&pipelineState, "id = ?", i.ID)
 		if result.RowsAffected == 0 {
 			pipelineState.ID = i.ID
 			db.Create(&pipelineState)
-		} else {
-
 		}
 
 		if pipelineState.State != "complete" {
 			getPipelineState(c, i, pipelineState, db)
 		}
+
+		db.Limit(1).Find(&pipelineState, "id = ?", i.ID)
 
 		var stateString string
 		if pipelineState.State == "complete" {
@@ -114,7 +113,10 @@ func getPipelineState(c *Client, i Pipeline, pipelineState *PipelineState, db *g
 				} else {
 					for _, i := range job {
 						if i.Status == "failed" {
-							url := fmt.Sprintf("https://app.circleci.com/pipelines/github/%s/%s/%d/workflows/%s/jobs/%d", org, project, workflow.PipelineNumber, workflow.ID, i.JobNumber)
+							url := fmt.Sprintf(
+								"https://app.circleci.com/pipelines/github/%s/%s/%d/workflows/%s/jobs/%d",
+								org, project, workflow.PipelineNumber, workflow.ID, i.JobNumber,
+							)
 							jobState := &JobState{}
 
 							result := db.Limit(1).Find(&jobState, "id = ?", i.ID)
@@ -126,7 +128,6 @@ func getPipelineState(c *Client, i Pipeline, pipelineState *PipelineState, db *g
 							jobState.Name = i.Name
 
 							if result.RowsAffected == 0 {
-								pipelineState.ID = i.ID
 								db.Create(&jobState)
 							} else {
 								db.Updates(&jobState)
