@@ -74,9 +74,18 @@ func main() {
 				stateString = "✓"
 			}
 		} else {
-			stateString = " "
+			if pipelineState.State == "running" {
+				stateString = ">"
+			} else {
+				stateString = " "
+			}
 		}
-		fmt.Println(stateString, i.Vcs.Commit.Subject)
+
+		if i.Vcs.Commit.Subject == "" {
+			fmt.Println(stateString, i.Vcs.Commit.Body)
+		} else {
+			fmt.Println(stateString, i.Vcs.Commit.Subject)
+		}
 
 		if pipelineState.Result == "failed" {
 			var jobs []JobState
