@@ -10,6 +10,15 @@ $ ./circleci
     run_foo_tests failed <link to failing job>
 ```
 
+You can examine one pipeline by specifying a substring, which is used to match against the subject:
+
+```
+$ ./circleci foo/bar
+  Merge pull request #77028 from foo/bar
+    run_foo_tests running
+    run_bar_tests blocked
+```
+
 Configuration is via environment variables. .env file supported:
 
 ```

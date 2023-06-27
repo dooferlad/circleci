@@ -2,7 +2,9 @@ package main
 
 import (
 	"fmt"
+	"github.com/fatih/color"
 	"os"
+	"strings"
 
 	"github.com/joho/godotenv"
 	"github.com/sirupsen/logrus"
@@ -47,12 +49,33 @@ func main() {
 
 	c := NewClient(os.Getenv("CIRCLECI_TOKEN"), os.Getenv("CIRCLECI_ORG_SLUG"))
 
+	var pipelineName string
+	if len(os.Args) > 1 {
+		pipelineName = os.Args[1]
+	}
+
 	v, err := c.GetProjectPipelines(os.Getenv("CIRCLECI_PROJECT"), os.Getenv("CIRCLECI_BRANCH"), 5)
 	if err != nil {
 		logrus.Fatal(err)
 	}
 
 	for _, i := range v {
+		var subject string
+		var getDetail bool
+		if i.Vcs.Commit.Subject == "" {
+			subject = i.Vcs.Commit.Body
+		} else {
+			subject = i.Vcs.Commit.Subject
+		}
+
+		// If we have got a pipelineName to look for, don't print other info
+		if pipelineName != "" {
+			if !strings.Contains(subject, pipelineName) {
+				continue
+			}
+			getDetail = true
+		}
+
 		pipelineState := &PipelineState{}
 		result := db.Limit(1).Find(&pipelineState, "id = ?", i.ID)
 		if result.RowsAffected == 0 {
@@ -61,7 +84,7 @@ func main() {
 		}
 
 		if pipelineState.State != "complete" {
-			getPipelineState(c, i, pipelineState, db)
+			getPipelineState(c, i, pipelineState, db, getDetail)
 		}
 
 		db.Limit(1).Find(&pipelineState, "id = ?", i.ID)
@@ -69,37 +92,48 @@ func main() {
 		var stateString string
 		if pipelineState.State == "complete" {
 			if pipelineState.Result == "failed" {
+				color.Set(color.FgRed)
 				stateString = "✗"
 			} else {
+				color.Set(color.FgGreen)
 				stateString = "✓"
 			}
 		} else {
 			if pipelineState.State == "running" {
+				color.Set(color.FgBlue)
 				stateString = ">"
 			} else {
 				stateString = " "
 			}
 		}
 
-		if i.Vcs.Commit.Subject == "" {
-			fmt.Println(stateString, i.Vcs.Commit.Body)
-		} else {
-			fmt.Println(stateString, i.Vcs.Commit.Subject)
-		}
+		fmt.Println(stateString, subject)
+		color.Set(color.Reset)
 
-		if pipelineState.Result == "failed" {
+		if pipelineState.Result == "failed" || getDetail {
 			var jobs []JobState
 			db.Where("pipeline_id = ?", pipelineState.ID).Find(&jobs)
 
 			for _, job := range jobs {
-				fmt.Println("   ", job.Name, job.Result, job.URL)
+				if (getDetail && job.Result != "success") || (!getDetail && job.Result == "failed") {
+					switch job.Result {
+					case "running":
+						color.Set(color.FgHiBlue)
+					case "blocked":
+						color.Set(color.FgYellow)
+					case "failed":
+						color.Set(color.FgRed)
+					}
+					fmt.Printf("   %60s %10s %s\n", job.Name, job.Result, job.URL)
+					color.Set(color.Reset)
+				}
 			}
 		}
 	}
 	return
 }
 
-func getPipelineState(c *Client, i Pipeline, pipelineState *PipelineState, db *gorm.DB) {
+func getPipelineState(c *Client, i Pipeline, pipelineState *PipelineState, db *gorm.DB, force bool) {
 	org := os.Getenv("CIRCLECI_ORG")
 	project := os.Getenv("CIRCLECI_PROJECT")
 
@@ -116,31 +150,29 @@ func getPipelineState(c *Client, i Pipeline, pipelineState *PipelineState, db *g
 				running = true
 			}
 
-			if workflow.Status == "failed" {
+			if workflow.Status == "failed" || force {
 				if job, err := c.GetWorkflowJobs(workflow.ID, 100); err != nil {
 					logrus.Fatal(err)
 				} else {
 					for _, i := range job {
-						if i.Status == "failed" {
-							url := fmt.Sprintf(
-								"https://app.circleci.com/pipelines/github/%s/%s/%d/workflows/%s/jobs/%d",
-								org, project, workflow.PipelineNumber, workflow.ID, i.JobNumber,
-							)
-							jobState := &JobState{}
+						url := fmt.Sprintf(
+							"https://app.circleci.com/pipelines/github/%s/%s/%d/workflows/%s/jobs/%d",
+							org, project, workflow.PipelineNumber, workflow.ID, i.JobNumber,
+						)
+						jobState := &JobState{}
 
-							result := db.Limit(1).Find(&jobState, "id = ?", i.ID)
+						result := db.Limit(1).Find(&jobState, "id = ?", i.ID)
 
-							jobState.ID = i.ID
-							jobState.URL = url
-							jobState.Result = i.Status
-							jobState.PipelineID = pipelineState.ID
-							jobState.Name = i.Name
+						jobState.ID = i.ID
+						jobState.URL = url
+						jobState.Result = i.Status
+						jobState.PipelineID = pipelineState.ID
+						jobState.Name = i.Name
 
-							if result.RowsAffected == 0 {
-								db.Create(&jobState)
-							} else {
-								db.Updates(&jobState)
-							}
+						if result.RowsAffected == 0 {
+							db.Create(&jobState)
+						} else {
+							db.Updates(&jobState)
 						}
 					}
 				}
