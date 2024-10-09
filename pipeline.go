@@ -2,6 +2,7 @@ package main
 
 import (
 	"fmt"
+	"github.com/sirupsen/logrus"
 	"net/url"
 	"time"
 )
@@ -90,6 +91,7 @@ func (c *Client) GetPipelineWorkflows(id string, max int) ([]Workflow, error) {
 
 	u, err := url.Parse(fmt.Sprintf("https://circleci.com/api/v2/pipeline/%s/workflow", id))
 	if err != nil {
+		logrus.Error("Unable to parse URL: ", err)
 		return nil, err
 	}
 
