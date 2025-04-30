@@ -57,3 +57,22 @@ func (c *Client) GetWorkflowJobs(id string, max int) ([]WorkflowJob, error) {
 
 	return get[WorkflowJob](c, u, max)
 }
+
+type TaskUsage struct {
+	TaskNumber     int       `json:"task_number"`
+	Interval       int       `json:"interval"`
+	CPU            []float32 `json:"cpu"`
+	MemoryBytes    []float32 `json:"memory_bytes"`
+	NetworkBytesRx int       `json:"network_bytes_rx"`
+	NetworkBytesTx int       `json:"network_bytes_tx"`
+}
+
+type Usage []TaskUsage
+
+func (c *Client) GetJobUsage(job *WorkflowJob) (*Usage, error) {
+	u, err := url.Parse(fmt.Sprintf("https://dl.circleci.com/private/output/job/%s/usage", job.ID))
+	if err != nil {
+		return nil, err
+	}
+	return getOne[Usage](c, u)
+}

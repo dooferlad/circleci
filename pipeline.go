@@ -86,6 +86,15 @@ func (c *Client) GetProjectPipelines(project, branch string, max int) ([]Pipelin
 	return get[Pipeline](c, u, max)
 }
 
+func (c *Client) GetPipelineByNumber(project string, number int) (*Pipeline, error) {
+	u, err := url.Parse(fmt.Sprintf("https://circleci.com/api/v2/project/%s/%s/pipeline/%d", c.orgSlug, project, number))
+	if err != nil {
+		return nil, err
+	}
+
+	return getOne[Pipeline](c, u)
+}
+
 func (c *Client) GetPipelineWorkflows(id string, max int) ([]Workflow, error) {
 	// https://circleci.com/docs/api/v2/index.html#operation/listPipelinesForProject
 

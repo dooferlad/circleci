@@ -8,6 +8,8 @@ import (
 	"github.com/sirupsen/logrus"
 	"net/http"
 	"net/url"
+	"strconv"
+	"time"
 )
 
 type Client struct {
@@ -96,11 +98,31 @@ func get[T any](c *Client, url *url.URL, max int) ([]T, error) {
 
 func getOne[T any](c *Client, url *url.URL) (*T, error) {
 	var response T
-	resp, err := c.Request("GET", url.String())
-	if err != nil {
+
+	for {
+		resp, err := c.Request("GET", url.String())
+		if err != nil {
+			return &response, err
+		}
+
+		if resp.StatusCode == 429 {
+			sleepFor := time.Second
+
+			if v, ok := resp.Header["Ratelimit-Remaining"]; ok {
+				logrus.Errorf(v[0])
+				if delay, err := strconv.Atoi(v[0]); err == nil {
+					sleepFor = time.Second * time.Duration(delay)
+				}
+			}
+
+			time.Sleep(sleepFor)
+			continue
+		} else if resp.StatusCode >= 400 {
+			logrus.Errorf("HTTP error: %#v", resp)
+			return nil, errors.New("Unexpected HTTP status")
+		}
+
+		err = json.NewDecoder(resp.Body).Decode(&response)
 		return &response, err
 	}
-
-	err = json.NewDecoder(resp.Body).Decode(&response)
-	return &response, err
 }

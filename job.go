@@ -56,10 +56,10 @@ type Organization struct {
 	Name string `json:"name"`
 }
 
-func (c *Client) GetJob(project, jobNumber int) (*Job, error) {
+func (c *Client) GetJob(projectSlug string, jobNumber int) (*Job, error) {
 	// https://circleci.com/docs/api/v2/index.html#tag/Context
 
-	u, err := url.Parse(fmt.Sprintf("https://circleci.com/api/v2/project/%s/%s/job/%i", c.orgSlug, project, jobNumber))
+	u, err := url.Parse(fmt.Sprintf("https://circleci.com/api/v2/project/%s/job/%d", projectSlug, jobNumber))
 	if err != nil {
 		return nil, err
 	}
